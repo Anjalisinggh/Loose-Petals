@@ -99,6 +99,7 @@ export class Garden {
       motes: this.motes,
       time: 0,
       still: this.reduced,
+      touch: window.matchMedia('(pointer: coarse)').matches,
       shake: 0,
       hovered: null,
       cursor: null,

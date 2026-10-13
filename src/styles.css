@@ -325,7 +325,24 @@ button {
   border: 0;
   opacity: 0;
   font-size: 16px;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+  outline: none;
   pointer-events: none;
+  /* The page disables text selection; without this iOS refuses to type into the field. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* On touch screens the field itself covers the caret, so a tap there opens the keyboard natively. */
+@media (pointer: coarse) {
+  .typing {
+    width: 172px;
+    height: 156px;
+    transform: translate(-50%, -52%);
+    pointer-events: auto;
+  }
 }
 
 /* ── small screens ────────────────────────────────────── */

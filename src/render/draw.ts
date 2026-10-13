@@ -14,6 +14,8 @@ export interface Scene {
   time: number;
   /** True when the viewer prefers reduced motion. */
   still: boolean;
+  /** True on touch screens, where the caret doubles as the place to tap for the keyboard. */
+  touch: boolean;
   shake: number;
   hovered: Plant | null;
   /** Mouse position for the on-canvas cursor hint, or null when absent. */
@@ -254,7 +256,7 @@ function drawCaret(c: CanvasRenderingContext2D, s: Scene) {
     c.font = `italic 13px ${LETTER_FONT}`;
     c.textAlign = 'center';
     c.textBaseline = 'top';
-    c.fillText('start typing', x, base + size * 0.06 + 14);
+    c.fillText(s.touch ? 'tap here to type' : 'start typing', x, base + size * 0.06 + 14);
     c.textAlign = 'start';
     c.textBaseline = 'alphabetic';
   }
