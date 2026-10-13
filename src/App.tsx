@@ -23,6 +23,7 @@ export function App() {
   const [gusts, setGusts] = useState(false);
   const [count, setCount] = useState(0);
   const [text, setText] = useState('');
+  const [night, setNight] = useState(false);
   const typeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export function App() {
   useEffect(() => gardenRef.current?.setGravity(gravity), [gravity]);
   useEffect(() => gardenRef.current?.setGusts(gusts), [gusts]);
   useEffect(() => gardenRef.current?.setText(text), [text]);
+  useEffect(() => gardenRef.current?.setNight(night), [night]);
 
   const storm = useCallback(() => gardenRef.current?.petalStorm(), []);
   const save = useCallback(() => void gardenRef.current?.savePNG(), []);
@@ -66,7 +68,7 @@ export function App() {
   }, []);
 
   return (
-    <main className="stage">
+    <main className="stage" data-night={night}>
       <canvas ref={canvasRef} aria-label="An interactive garden of flowers you can drag, bend and grow" />
 
       <header className="ui tl">
@@ -78,6 +80,8 @@ export function App() {
         wind={wind}
         gravity={gravity}
         gusts={gusts}
+        night={night}
+        onNight={setNight}
         onWind={setWind}
         onGravity={setGravity}
         onGusts={setGusts}

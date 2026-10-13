@@ -5,6 +5,8 @@ interface Props {
   wind: number;
   gravity: number;
   gusts: boolean;
+  night: boolean;
+  onNight(v: boolean): void;
   onWind(v: number): void;
   onGravity(v: number): void;
   onGusts(v: boolean): void;
@@ -62,6 +64,16 @@ export const Controls = memo(function Controls(p: Props) {
       </div>
 
       <div className="row actions">
+        <button
+          type="button"
+          className="link"
+          aria-pressed={p.night}
+          onClick={() => p.onNight(!p.night)}
+          title={p.night ? 'Bring the sun back' : 'Let night fall'}
+        >
+          {p.night ? '☀ Day' : '☾ Night'}
+        </button>
+        <span aria-hidden="true">·</span>
         <button type="button" className="link" onClick={p.onStorm} title="Tear the petals loose and whirl them around">
           Petal storm
         </button>

@@ -1,9 +1,11 @@
 :root {
-  --paper: #f7f3ea;
-  --ink: #1f3a2b;
-  --ink-soft: rgba(31, 58, 43, 0.62);
-  --ink-faint: rgba(31, 58, 43, 0.4);
-  --line: rgba(31, 58, 43, 0.2);
+  --paper: #8fc6f3;
+  --ink: #ffffff;
+  --ink-soft: rgba(255, 255, 255, 0.88);
+  --ink-faint: rgba(255, 255, 255, 0.7);
+  --line: rgba(255, 255, 255, 0.42);
+  --glass: rgba(18, 60, 40, 0.2);
+  --deep: #1f5a2c;
   --coral: #f26b50;
   --sans: ui-sans-serif, 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
@@ -52,6 +54,12 @@ canvas {
   position: absolute;
   z-index: 2;
   pointer-events: none;
+  text-shadow: 0 1px 10px rgba(0, 30, 20, 0.35);
+}
+
+.stage[data-night='true'] {
+  --glass: rgba(6, 14, 50, 0.32);
+  --deep: #0a1a5e;
 }
 
 .tl {
@@ -100,7 +108,7 @@ canvas {
   padding: 10px 12px 9px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(247, 243, 234, 0.6);
+  background: var(--glass);
   backdrop-filter: blur(8px) saturate(1.1);
   -webkit-backdrop-filter: blur(8px) saturate(1.1);
 }
@@ -173,7 +181,7 @@ input[type='range']::-webkit-slider-thumb {
   margin-top: -5px;
   border: 1px solid var(--ink);
   border-radius: 50%;
-  background: var(--paper);
+  background: var(--ink);
   transition:
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
     background-color 0.2s ease;
@@ -183,7 +191,7 @@ input[type='range']::-moz-range-thumb {
   height: 9px;
   border: 1px solid var(--ink);
   border-radius: 50%;
-  background: var(--paper);
+  background: var(--ink);
   transition:
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
     background-color 0.2s ease;
@@ -234,7 +242,8 @@ button {
   transform: scale(0.95);
 }
 .chip[aria-pressed='true'] {
-  color: var(--paper);
+  text-shadow: none;
+  color: var(--deep);
   background: var(--ink);
   border-color: var(--ink);
 }
@@ -297,7 +306,7 @@ button {
 }
 
 .br .chip {
-  background: rgba(247, 243, 234, 0.6);
+  background: var(--glass);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }

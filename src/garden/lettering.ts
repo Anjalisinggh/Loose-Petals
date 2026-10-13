@@ -85,7 +85,7 @@ export function layoutLetters(letters: Letter[], w: number, h: number) {
   let ems = 0;
   for (const l of letters) ems += l.em;
   if (ems <= 0) return;
-  const size = Math.max(16, Math.min(h * 0.24, (w * 0.84) / ems, 230));
+  const size = Math.max(16, Math.min(h * 0.3, (w * 0.86) / ems, 260));
   let x = (w - ems * size) / 2;
   const y = h * 0.5 + size * 0.3;
   for (const l of letters) {

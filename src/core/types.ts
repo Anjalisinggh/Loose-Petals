@@ -93,6 +93,8 @@ export interface Leaf {
   vel: number;
   abs: number;
   color: string;
+  /** Moonlit colour used after dark. */
+  night: string;
 }
 
 export interface Plant {
@@ -115,6 +117,7 @@ export interface Plant {
   tipAngle: number;
   stemW: number;
   stemColor: string;
+  stemNight: string;
   leaves: Leaf[];
 
   head: Matter.Body;

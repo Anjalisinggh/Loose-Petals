@@ -12,6 +12,8 @@ const STAND = 24;
 
 const STEM_COLORS = ['#1E4A32', '#24553A', '#1A3F2B', '#2C5E3F', '#1F4A33'];
 const LEAF_COLORS = ['#2F6B46', '#3C7A4F', '#285A3C', '#34704A'];
+const STEM_NIGHT = ['#6fb9a2', '#5aa690', '#7fc4ae'];
+const LEAF_NIGHT = ['#4f9c8a', '#62b09a', '#458a7c'];
 
 export interface PlantOptions {
   id: number;
@@ -144,6 +146,7 @@ export function createPlant(o: PlantOptions): Plant {
       vel: 0,
       abs: 0,
       color: tone(pick(rng, LEAF_COLORS), range(rng, -0.08, 0.08)),
+      night: pick(rng, LEAF_NIGHT),
     });
     side = -side;
   }
@@ -166,6 +169,7 @@ export function createPlant(o: PlantOptions): Plant {
     tipAngle: ang,
     stemW: v.stemW * (0.75 + 0.25 * o.scale) * (o.parent ? 0.75 : 1),
     stemColor: pick(rng, STEM_COLORS),
+    stemNight: pick(rng, STEM_NIGHT),
     leaves,
     head,
     color,

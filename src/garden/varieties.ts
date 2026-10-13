@@ -58,7 +58,7 @@ interface PetalLook {
 
 /** Bakes one shaded petal: gradient along its length, a crease, veins and a soft edge. */
 function petalSprite(kind: PetalKind, L: number, W: number, color: string, rng: Rng, look: PetalLook = {}): Sprite {
-  const pad = 3;
+  const pad = 9;
   const w = L * 1.1 + pad * 2;
   const h = W * 2.6 + pad * 2;
   const k = range(rng, -0.12, 0.12);
@@ -66,23 +66,47 @@ function petalSprite(kind: PetalKind, L: number, W: number, color: string, rng: 
   const veins = look.veins ?? 4;
   return makeSprite(w, h, pad, h / 2, (c) => {
     c.translate(pad, h / 2);
+
+    // The petal casts a soft shadow, so overlapping petals shade the ones beneath.
+    c.save();
+    c.shadowColor = 'rgba(40,14,8,0.26)';
+    c.shadowBlur = 7;
+    c.shadowOffsetX = 2;
+    c.shadowOffsetY = 3;
     tracePetal(c, kind, L, W, k);
     const g = c.createLinearGradient(0, 0, L, 0);
-    g.addColorStop(0, tone(color, -0.32 - d));
-    g.addColorStop(0.45, tone(color, -d));
-    g.addColorStop(1, tone(color, 0.18 - d));
+    g.addColorStop(0, tone(color, -0.46 - d));
+    g.addColorStop(0.22, tone(color, -0.2 - d));
+    g.addColorStop(0.6, tone(color, -d));
+    g.addColorStop(1, tone(color, 0.22 - d));
     c.fillStyle = g;
     c.fill();
+    c.restore();
 
+    tracePetal(c, kind, L, W, k);
     c.save();
     c.clip();
+
+    // Cupping: the surface catches light along one flank and falls away on the other.
     const s = c.createLinearGradient(0, -W, 0, W);
-    s.addColorStop(0, 'rgba(255,250,235,0.20)');
-    s.addColorStop(0.5, 'rgba(255,250,235,0)');
-    s.addColorStop(0.52, 'rgba(40,20,10,0.06)');
-    s.addColorStop(1, 'rgba(40,20,10,0.18)');
+    s.addColorStop(0, 'rgba(255,252,240,0.30)');
+    s.addColorStop(0.42, 'rgba(255,252,240,0.04)');
+    s.addColorStop(0.5, 'rgba(40,16,8,0.10)');
+    s.addColorStop(1, 'rgba(40,16,8,0.2)');
     c.fillStyle = s;
     c.fillRect(-pad, -h, w, h * 2);
+    const sheen = c.createRadialGradient(L * 0.62, -W * 0.25, 0, L * 0.62, -W * 0.25, W * 1.2);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.26)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = sheen;
+    c.fillRect(-pad, -h, w, h * 2);
+    // Deep shade where the petal tucks under the centre.
+    const tuck = c.createRadialGradient(0, 0, 0, 0, 0, L * 0.42);
+    tuck.addColorStop(0, 'rgba(30,8,6,0.3)');
+    tuck.addColorStop(1, 'rgba(30,8,6,0)');
+    c.fillStyle = tuck;
+    c.fillRect(-pad, -h, w, h * 2);
+
     if (look.blotch) {
       const b = c.createRadialGradient(0, 0, 0, 0, 0, L * 0.34);
       b.addColorStop(0, look.blotch);
@@ -93,20 +117,47 @@ function petalSprite(kind: PetalKind, L: number, W: number, color: string, rng: 
       c.fillRect(-pad, -h, w, h * 2);
       c.globalAlpha = 1;
     }
-    c.strokeStyle = tone(color, -0.5, 0.26);
-    c.lineWidth = 0.5;
-    for (let i = 0; i < veins; i++) {
-      const t = veins > 1 ? (i / (veins - 1) - 0.5) * 2 : 0;
+
+    // Fine grain running the length of the petal, like real tissue.
+    c.lineWidth = 0.35;
+    for (let i = 0; i < 26; i++) {
+      const t = range(rng, -1, 1);
+      c.strokeStyle = i % 2 ? tone(color, -0.5, 0.1) : 'rgba(255,255,255,0.1)';
       c.beginPath();
-      c.moveTo(L * 0.05, 0);
-      c.quadraticCurveTo(L * 0.45, t * W * 0.8, L * range(rng, 0.8, 0.92), t * W * 0.62);
+      c.moveTo(L * range(rng, 0.05, 0.3), t * W * 0.25);
+      c.quadraticCurveTo(L * 0.55, t * W * 0.85, L * range(rng, 0.75, 1), t * W * 0.7);
       c.stroke();
     }
+    // Veins, each with a couple of side branches.
+    c.strokeStyle = tone(color, -0.55, 0.3);
+    for (let i = 0; i < veins; i++) {
+      const t = veins > 1 ? (i / (veins - 1) - 0.5) * 2 : 0;
+      const ex = L * range(rng, 0.8, 0.93);
+      c.lineWidth = 0.55;
+      c.beginPath();
+      c.moveTo(L * 0.05, 0);
+      c.quadraticCurveTo(L * 0.45, t * W * 0.8, ex, t * W * 0.62);
+      c.stroke();
+      c.lineWidth = 0.3;
+      for (const f of [0.5, 0.7]) {
+        const bx = L * f;
+        const by = t * W * 0.72 * f;
+        c.beginPath();
+        c.moveTo(bx, by);
+        c.lineTo(bx + L * 0.14, by + (t >= 0 ? 1 : -1) * W * 0.16);
+        c.stroke();
+      }
+    }
+    // A thin lit rim where the edge curls toward the light.
+    tracePetal(c, kind, L, W, k);
+    c.strokeStyle = 'rgba(255,255,255,0.32)';
+    c.lineWidth = 1.6;
+    c.stroke();
     c.restore();
 
     tracePetal(c, kind, L, W, k);
-    c.strokeStyle = tone(color, -0.42 - d, 0.4);
-    c.lineWidth = 0.6;
+    c.strokeStyle = tone(color, -0.5 - d, 0.45);
+    c.lineWidth = 0.5;
     c.stroke();
   });
 }
@@ -138,10 +189,15 @@ function ball(c: CanvasRenderingContext2D, r: number, light: string, dark: strin
   const g = c.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.08, 0, 0, r);
   g.addColorStop(0, light);
   g.addColorStop(1, dark);
+  c.save();
+  c.shadowColor = 'rgba(30,12,6,0.45)';
+  c.shadowBlur = 6;
+  c.shadowOffsetY = 2;
   c.fillStyle = g;
   c.beginPath();
   c.arc(0, 0, r, 0, TAU);
   c.fill();
+  c.restore();
 }
 
 /** Sunflower-seed dot packing. */

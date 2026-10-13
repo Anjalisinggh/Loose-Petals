@@ -14,7 +14,10 @@ export interface PointerHandlers {
 export function bindPointer(canvas: HTMLCanvasElement, h: PointerHandlers): () => void {
   const local = (e: { clientX: number; clientY: number }) => {
     const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    // Divide out any CSS scaling so positions stay in the canvas's own coordinates.
+    const sx = r.width ? canvas.offsetWidth / r.width : 1;
+    const sy = r.height ? canvas.offsetHeight / r.height : 1;
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
   };
 
   const onDown = (e: PointerEvent) => {

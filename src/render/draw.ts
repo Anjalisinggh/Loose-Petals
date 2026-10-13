@@ -4,6 +4,10 @@ import { clamp, easeOutBack, easeOutCubic, lerp, smooth, TAU } from '../core/mat
 import { drawSprite, drawSpriteCentred, shadowSprite } from '../canvas/sprites';
 import { PALETTE, tone } from '../core/color';
 import { LETTER_FONT, type Letter } from '../garden/lettering';
+import type { Air } from '../core/types';
+import { drawSky, type Sky } from '../scene/sky';
+import { drawBlades, type Meadow } from '../scene/meadow';
+import { drawBirds, drawFlyers, drawMouse, groundBelow, mouseY, type Creatures } from '../scene/creatures';
 
 export interface Scene {
   surface: Surface;
@@ -11,6 +15,12 @@ export interface Scene {
   letters: Letter[];
   petals: LoosePetal[];
   motes: Mote[];
+  air: Air;
+  sky: Sky;
+  meadow: Meadow;
+  creatures: Creatures;
+  /** 0 = day, 1 = night, in between while the light changes. */
+  night: number;
   time: number;
   /** True when the viewer prefers reduced motion. */
   still: boolean;
@@ -24,45 +34,106 @@ export interface Scene {
 
 const PX = new Float32Array(64);
 const PY = new Float32Array(64);
-const INK = PALETTE.ink;
+const INK = '#ffffff';
 
 export function drawScene(c: CanvasRenderingContext2D, s: Scene, overlay: boolean) {
   const { w, h, dpr } = s.surface;
+  const night = s.night;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.globalAlpha = 1;
-  c.drawImage(s.surface.paper, 0, 0, w, h);
+  drawSky(c, s.sky, s.surface.backdrop, w, h, night, s.time, s.still);
 
   if (overlay && s.shake > 0.2) {
     c.translate(Math.sin(s.time * 71) * s.shake, Math.cos(s.time * 83) * s.shake * 0.7);
   }
 
-  drawLetters(c, s.letters);
-  for (let i = 0; i < s.plants.length; i++) drawStem(c, s.plants[i]);
+  drawBirds(c, s.creatures, night);
+
+  // Grass behind the mouse, the mouse, the grass in front of it, then the floating word.
+  const front = h - 34;
+  const burrow = Math.min(mouseY(s.creatures), front);
+  drawBlades(c, s.meadow, -Infinity, burrow, s.air, s.time, night);
+  // Anything with separate day and night colours is cross-faded rather than switched.
+  if (night < 1) drawMouse(c, s.creatures, 0, s.time);
+  if (night > 0) {
+    c.globalAlpha = night;
+    drawMouse(c, s.creatures, 1, s.time);
+    c.globalAlpha = 1;
+  }
+  drawBlades(c, s.meadow, burrow, front, s.air, s.time, night);
+  drawLetters(c, s.letters, night);
+
+  if (night < 1) for (let i = 0; i < s.plants.length; i++) drawStem(c, s.plants[i], false);
+  if (night > 0) {
+    c.globalAlpha = night;
+    for (let i = 0; i < s.plants.length; i++) drawStem(c, s.plants[i], true);
+    c.globalAlpha = 1;
+  }
   for (let i = 0; i < s.plants.length; i++) drawHead(c, s.plants[i]);
   drawPetals(c, s.petals);
+  drawBlades(c, s.meadow, front, Infinity, s.air, s.time, night);
+  drawFlyers(c, s.creatures, night, s.time);
   drawMotes(c, s.motes);
 
   if (overlay) drawOverlay(c, s);
   c.globalAlpha = 1;
 }
 
-/** Typed words sit on the paper like letterpress; everything grows over them. */
-function drawLetters(c: CanvasRenderingContext2D, letters: Letter[]) {
+const mix = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+
+/**
+ * Typed words float above the field as solid white letters: a soft shadow on the grass
+ * below, a stack of offset copies for the extruded side, then the lit face.
+ */
+function drawLetters(c: CanvasRenderingContext2D, letters: Letter[], night: number) {
   if (!letters.length) return;
-  c.fillStyle = INK;
   c.textBaseline = 'alphabetic';
   for (let i = 0; i < letters.length; i++) {
     const l = letters[i];
     const t = Math.min(1, l.age * 4);
-    c.globalAlpha = 0.92 * t;
+    const rise = (1 - t) * (1 - t) * l.size * 0.1;
+    const x = l.x;
+    const y = l.y + rise;
     c.font = `${l.size.toFixed(1)}px ${LETTER_FONT}`;
-    c.fillText(l.ch, l.x, l.y + (1 - t) * (1 - t) * l.size * 0.08);
+
+    // The word hangs in the air; its shadow lies on the grass below.
+    const span = l.em * l.size;
+    const reach = span * 0.8;
+    c.save();
+    c.translate(x + span / 2 + l.size * 0.14, groundBelow(l.ty, l.size));
+    c.scale(1, 0.15);
+    const shade = c.createRadialGradient(0, 0, 0, 0, 0, reach);
+    shade.addColorStop(0, `rgba(4,28,10,${0.36 * t})`);
+    shade.addColorStop(1, 'rgba(4,28,10,0)');
+    c.fillStyle = shade;
+    c.beginPath();
+    c.arc(0, 0, reach, 0, TAU);
+    c.fill();
+    c.restore();
+
+    c.globalAlpha = t;
+    const depth = Math.max(4, Math.round(l.size * 0.095));
+    for (let k = depth; k >= 1; k--) {
+      const f = k / depth;
+      // Sides fall from pale near the face to deep shade at the back.
+      c.fillStyle = `rgb(${mix(mix(206, 118, f), mix(120, 34, f), night)},${mix(mix(216, 150, f), mix(146, 52, f), night)},${mix(mix(196, 124, f), mix(226, 128, f), night)})`;
+      c.fillText(l.ch, x + k * 0.62, y + k * 0.82);
+    }
+    if (night > 0.02) {
+      c.shadowColor = `rgba(170,205,255,${0.75 * night})`;
+      c.shadowBlur = l.size * 0.16;
+    }
+    c.fillStyle = `rgb(${mix(255, 236, night)},${mix(253, 243, night)},${mix(245, 255, night)})`;
+    c.fillText(l.ch, x, y);
+    c.shadowBlur = 0;
+    c.shadowColor = 'transparent';
   }
   c.globalAlpha = 1;
 }
 
-function drawStem(c: CanvasRenderingContext2D, p: Plant) {
+function drawStem(c: CanvasRenderingContext2D, p: Plant, dark: boolean) {
   if (p.growth <= 0) return;
+  const stem = dark ? p.stemNight : p.stemColor;
   const nodes = p.nodes;
   const n = nodes.length;
   for (let i = 0; i < n; i++) {
@@ -81,23 +152,29 @@ function drawStem(c: CanvasRenderingContext2D, p: Plant) {
   const w0 = p.stemW * (0.5 + 0.5 * grow) * thin;
   const w1 = p.stemW * 0.5 * thin;
 
-  c.strokeStyle = p.stemColor;
   c.lineCap = 'round';
   c.lineJoin = 'round';
-  for (let k = 0; k <= n; k++) {
-    c.beginPath();
-    if (k === 0) {
-      c.moveTo(PX[0], PY[0]);
-      c.lineTo((PX[0] + PX[1]) / 2, (PY[0] + PY[1]) / 2);
-    } else if (k === n) {
-      c.moveTo((PX[n - 1] + PX[n]) / 2, (PY[n - 1] + PY[n]) / 2);
-      c.lineTo(PX[n], PY[n]);
-    } else {
-      c.moveTo((PX[k - 1] + PX[k]) / 2, (PY[k - 1] + PY[k]) / 2);
-      c.quadraticCurveTo(PX[k], PY[k], (PX[k] + PX[k + 1]) / 2, (PY[k] + PY[k + 1]) / 2);
+  // Two passes: the stem itself, then a thin highlight down its lit side so it reads as round.
+  for (let pass = 0; pass < 2; pass++) {
+    c.strokeStyle = pass === 0 ? stem : dark ? 'rgba(200,245,235,0.3)' : 'rgba(190,232,150,0.42)';
+    const shift = pass === 0 ? 0 : -0.3;
+    for (let k = 0; k <= n; k++) {
+      const lw = lerp(w0, w1, k / n);
+      const dx = shift * lw;
+      c.beginPath();
+      if (k === 0) {
+        c.moveTo(PX[0] + dx, PY[0]);
+        c.lineTo((PX[0] + PX[1]) / 2 + dx, (PY[0] + PY[1]) / 2);
+      } else if (k === n) {
+        c.moveTo((PX[n - 1] + PX[n]) / 2 + dx, (PY[n - 1] + PY[n]) / 2);
+        c.lineTo(PX[n] + dx, PY[n]);
+      } else {
+        c.moveTo((PX[k - 1] + PX[k]) / 2 + dx, (PY[k - 1] + PY[k]) / 2);
+        c.quadraticCurveTo(PX[k] + dx, PY[k], (PX[k] + PX[k + 1]) / 2 + dx, (PY[k] + PY[k + 1]) / 2);
+      }
+      c.lineWidth = pass === 0 ? lw : lw * 0.32;
+      c.stroke();
     }
-    c.lineWidth = lerp(w0, w1, k / n);
-    c.stroke();
   }
 
   for (let k = 0; k < p.leaves.length; k++) {
@@ -111,12 +188,30 @@ function drawStem(c: CanvasRenderingContext2D, p: Plant) {
     c.save();
     c.translate(x, y);
     c.rotate(lf.abs);
-    c.fillStyle = lf.color;
+    c.fillStyle = dark ? lf.night : lf.color;
     c.beginPath();
     c.moveTo(0, 0);
     c.quadraticCurveTo(L * 0.32, -W, L, 0);
     c.quadraticCurveTo(L * 0.45, W * 0.72, 0, 0);
     c.fill();
+    // The far half of the blade sits in shade; side veins run off the midrib.
+    c.fillStyle = 'rgba(0,26,10,0.22)';
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.quadraticCurveTo(L * 0.5, -W * 0.12, L, 0);
+    c.quadraticCurveTo(L * 0.45, W * 0.72, 0, 0);
+    c.fill();
+    c.strokeStyle = 'rgba(230,255,210,0.22)';
+    c.lineWidth = 0.4;
+    for (let v = 1; v <= 4; v++) {
+      const vx = (L * v) / 5.2;
+      c.beginPath();
+      c.moveTo(vx, -W * 0.03);
+      c.lineTo(vx + L * 0.12, -W * (0.5 - v * 0.07));
+      c.moveTo(vx, 0);
+      c.lineTo(vx + L * 0.12, W * (0.38 - v * 0.06));
+      c.stroke();
+    }
     c.strokeStyle = 'rgba(16,40,26,0.35)';
     c.lineWidth = 0.5;
     c.beginPath();
@@ -124,7 +219,7 @@ function drawStem(c: CanvasRenderingContext2D, p: Plant) {
     c.quadraticCurveTo(L * 0.5, -W * 0.12, L * 0.92, 0);
     c.stroke();
     c.restore();
-    c.fillStyle = p.stemColor;
+    c.fillStyle = stem;
     c.beginPath();
     c.arc(x, y, p.stemW * 0.75 * thin, 0, TAU);
     c.fill();
@@ -242,7 +337,7 @@ function drawCaret(c: CanvasRenderingContext2D, s: Scene) {
   const base = last ? last.y : h * 0.5 + size * 0.3;
   // A slow breath rather than a hard blink; steady when motion is reduced.
   const pulse = s.still ? 0.6 : 0.5 + 0.5 * Math.sin(s.time * 4.2);
-  c.globalAlpha = 0.14 + 0.5 * pulse * pulse;
+  c.globalAlpha = 0.3 + 0.6 * pulse * pulse;
   c.strokeStyle = INK;
   c.lineCap = 'round';
   c.lineWidth = Math.max(1.2, size * 0.022);
@@ -251,7 +346,7 @@ function drawCaret(c: CanvasRenderingContext2D, s: Scene) {
   c.lineTo(x, base + size * 0.06);
   c.stroke();
   if (!last) {
-    c.globalAlpha = 0.42;
+    c.globalAlpha = 0.85;
     c.fillStyle = INK;
     c.font = `italic 13px ${LETTER_FONT}`;
     c.textAlign = 'center';
@@ -270,7 +365,7 @@ function drawOverlay(c: CanvasRenderingContext2D, s: Scene) {
     const p = s.plants[i];
     if (p.hover < 0.03) continue;
     const r = p.radius + 7 + 2 * p.hover;
-    c.globalAlpha = clamp(p.hover, 0, 1) * 0.42;
+    c.globalAlpha = clamp(p.hover, 0, 1) * 0.75;
     c.strokeStyle = INK;
     c.lineWidth = 0.9;
     c.setLineDash([1.5, 5]);
@@ -285,7 +380,7 @@ function drawOverlay(c: CanvasRenderingContext2D, s: Scene) {
     c.strokeStyle = INK;
     c.lineWidth = 0.8;
     if (mode === 'gust') {
-      c.globalAlpha = 0.22;
+      c.globalAlpha = 0.6;
       c.setLineDash([2, 6]);
       c.lineDashOffset = s.time * 30;
       c.beginPath();
@@ -293,7 +388,7 @@ function drawOverlay(c: CanvasRenderingContext2D, s: Scene) {
       c.stroke();
       c.setLineDash([]);
     } else {
-      c.globalAlpha = 0.3;
+      c.globalAlpha = 0.7;
       c.beginPath();
       c.arc(x, y, 7 + Math.sin(s.time * 3) * 1.2, 0, TAU);
       c.stroke();

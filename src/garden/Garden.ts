@@ -14,6 +14,9 @@ import { saveCanvasPng } from '../export/png';
 import { createPlant, type PlantOptions } from './plant';
 import { composeGarden } from './composition';
 import { BUD, VARIETIES } from './varieties';
+import { createSky, updateSky, type Sky } from '../scene/sky';
+import { createMeadow } from '../scene/meadow';
+import { createCreatures, updateCreatures } from '../scene/creatures';
 import { layoutLetters, letterEm, MAX_LETTERS, sampleGlyph, type Letter } from './lettering';
 
 const { Engine, Composite, Body, Events } = Matter;
@@ -64,6 +67,9 @@ export class Garden {
   private rnd = Math.random;
   private clock: () => number = () => performance.now();
   private manual = false;
+  private dark = false;
+  private nightT = 0;
+  private sky: Sky | null = null;
 
   private gravity = G_DEFAULT;
   private gusts = false;
@@ -99,6 +105,11 @@ export class Garden {
       letters: this.letters,
       petals: this.petals,
       motes: this.motes,
+      air: this.air,
+      sky: createSky(2, 2, this.surface.backdrop),
+      meadow: createMeadow(2, 2, 1),
+      creatures: createCreatures(2, 2, 1),
+      night: 0,
       time: 0,
       still: this.reduced,
       touch: window.matchMedia('(pointer: coarse)').matches,
@@ -156,6 +167,12 @@ export class Garden {
     this.gravity = clamp(value, -1, 1);
   }
 
+  /** Switches between the sunlit meadow and the moonlit one. */
+  setNight(on: boolean) {
+    this.dark = on;
+    if (this.reduced) this.nightT = on ? 1 : 0;
+  }
+
   setGusts(on: boolean) {
     this.gusts = on;
     if (on) {
@@ -175,7 +192,9 @@ export class Garden {
     for (const gone of letters.splice(keep)) {
       for (const p of gone.plants) {
         if (!this.plants.includes(p)) continue;
-        this.shed(p, 99, 170);
+        // A deleted letter's flowers burst apart rather than quietly vanishing.
+        this.shed(p, 99, 420);
+        puff(this.motes, p.head.position.x, p.head.position.y, p.art.pollen, 10, 260);
         this.removePlant(p);
       }
     }
@@ -203,16 +222,16 @@ export class Garden {
     }
   }
 
-  /** Roots a few flowers in a letter: one nestled against it, the others reaching out. */
+  /** Roots a flower or two in a letter: one reaching out, sometimes a small one nestled against it. */
   private sprout(letter: Letter) {
-    const want = 3 + (this.rnd() < 0.4 ? 1 : 0);
+    const want = 1 + (this.rnd() < 0.35 ? 1 : 0);
     const spots = sampleGlyph(letter.ch, this.rnd, want);
     const down = this.gravity < -0.12;
     for (let k = 0; k < spots.length; k++) {
       if (this.plants.length >= MAX_PLANTS) break;
       const { ux, uy } = spots[k];
       const pin = { x: letter.x + ux * letter.size, y: letter.y + uy * letter.size };
-      const snug = k === 0 || k === 2;
+      const snug = k === 1;
       const reach = snug ? range(this.rnd, 10, 24) : clamp(range(this.rnd, 0.4, 1.05) * letter.size, 36, 210);
       const angle = (down ? 1 : -1) * Math.PI * 0.5 + range(this.rnd, -0.75, 0.75);
       const variety = snug
@@ -223,7 +242,7 @@ export class Garden {
       const plant = this.addPlant({
         variety,
         rng: this.rnd,
-        scale: clamp(letter.size / 190, 0.36, 0.8) * range(this.rnd, 0.8, 1.12),
+        scale: clamp(letter.size / 190, 0.36, 0.8) * range(this.rnd, 0.8, 1.12) * (snug ? 0.7 : 1),
         delay: 0.05 + k * 0.2,
         user: false,
         root: { x: pin.x, y: pin.y },
@@ -291,6 +310,11 @@ export class Garden {
 
   private onResize = (w: number, h: number, prevW: number, prevH: number) => {
     setBounds(this.world, w, h);
+    const backdrop = this.surface.backdrop;
+    this.sky = createSky(w, h, backdrop);
+    this.scene.sky = this.sky;
+    this.scene.meadow = createMeadow(w, h, backdrop.horizon);
+    this.scene.creatures = createCreatures(w, h, backdrop.horizon);
     this.air.cx = w / 2;
     this.air.cy = h * 0.45;
     this.sceneScale = clamp(Math.min(w, h) / 760, 0.68, 1.08);
@@ -490,10 +514,13 @@ export class Garden {
 
     // Letters ease into place as the word grows or shrinks, carrying their roots along.
     const ease = this.reduced ? 1 : 1 - Math.exp(-el * 11);
-    for (const l of this.letters) {
+    for (let i = 0; i < this.letters.length; i++) {
+      const l = this.letters[i];
+      // Each letter bobs a little out of step with its neighbours.
+      const bob = this.reduced ? 0 : Math.sin(this.time * 1.2 + i * 0.6) * l.tsize * 0.022;
       l.age += el;
       l.x += (l.tx - l.x) * ease;
-      l.y += (l.ty - l.y) * ease;
+      l.y += (l.ty + bob - l.y) * ease;
       l.size += (l.tsize - l.size) * ease;
       for (const s of l.pins) {
         s.pin.x = l.x + s.ux * l.size;
@@ -573,6 +600,27 @@ export class Garden {
       this.opts.onCount(this.count);
     }
 
+    const goal = this.dark ? 1 : 0;
+    // Dusk and dawn take a few unhurried seconds, at a steady pace.
+    const pace = el / 4.2;
+    this.nightT = goal > this.nightT ? Math.min(goal, this.nightT + pace) : Math.max(goal, this.nightT - pace);
+    if (this.sky) updateSky(this.sky, this.reduced ? 0 : el, this.air.strength, w);
+    let near: { x: number; y: number } | null = null;
+    for (const ptr of this.pointers.values()) near = ptr;
+    updateCreatures(this.scene.creatures, this.reduced ? el * 0.4 : el, {
+      w,
+      h,
+      horizon: this.surface.backdrop.horizon,
+      letters: this.letters,
+      plants: this.plants,
+      air: this.air,
+      cursor: near,
+      time: this.time,
+    });
+
+    // Ease in and out so the light neither lurches at the start nor snaps at the end.
+    const t = this.nightT;
+    this.scene.night = t * t * t * (t * (t * 6 - 15) + 10);
     this.scene.time = this.time;
     this.scene.shake = this.shakeAmp;
     this.scene.hovered = hovered;
