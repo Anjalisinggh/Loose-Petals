@@ -62,6 +62,8 @@ export class Garden {
   private heads = new Map<number, Plant>();
   private pointers = new Map<number, Pointer>();
   private rnd = Math.random;
+  private clock: () => number = () => performance.now();
+  private manual = false;
 
   private gravity = G_DEFAULT;
   private gusts = false;
@@ -115,8 +117,23 @@ export class Garden {
     this.surface.measure();
   }
 
+  /**
+   * Stops the live loop and returns a function that advances the garden by a given number
+   * of seconds. Lets a recorder render exact frames regardless of how fast it can capture.
+   */
+  stepManually(): (seconds: number) => void {
+    cancelAnimationFrame(this.raf);
+    this.manual = true;
+    let t = this.last;
+    this.clock = () => t;
+    return (seconds: number) => {
+      t += seconds * 1000;
+      this.runFrame(t);
+    };
+  }
+
   start() {
-    this.last = performance.now();
+    this.last = this.clock();
     this.raf = requestAnimationFrame(this.frame);
   }
 
@@ -357,7 +374,12 @@ export class Garden {
   // ── simulation ──────────────────────────────────────────────────────────────
 
   private frame = (now: number) => {
+    if (this.manual) return;
     this.raf = requestAnimationFrame(this.frame);
+    this.runFrame(now);
+  };
+
+  private runFrame(now: number) {
     let elapsed = (now - this.last) / 1000;
     this.last = now;
     // After a pause (hidden tab, breakpoint) resume gently instead of catching up.
@@ -376,7 +398,7 @@ export class Garden {
 
     this.update(elapsed);
     this.render(true);
-  };
+  }
 
   /** One fixed physics step: springs, air, contact, then integration. */
   private step(dt: number) {
@@ -658,7 +680,7 @@ export class Garden {
 
   /** A hard shake: everything is thrown about and petals fly. */
   private shake() {
-    const now = performance.now();
+    const now = this.clock();
     if (now - this.lastShake < 900) return;
     this.lastShake = now;
     this.shakeAmp = this.reduced ? 0 : 9;
@@ -784,7 +806,7 @@ export class Garden {
         y,
         vx: 0,
         vy: 0,
-        t: performance.now(),
+        t: this.clock(),
         down: false,
         startX: x,
         startY: y,
@@ -813,7 +835,7 @@ export class Garden {
     const ptr = this.pointer(id, x, y, type);
     ptr.x = x;
     ptr.y = y;
-    ptr.t = performance.now();
+    ptr.t = this.clock();
     ptr.down = true;
     ptr.startX = x;
     ptr.startY = y;
@@ -836,7 +858,7 @@ export class Garden {
 
   private onMove = (id: number, x: number, y: number, type: string) => {
     const ptr = this.pointer(id, x, y, type);
-    const now = performance.now();
+    const now = this.clock();
     const dt = Math.max(4, now - ptr.t) / 1000;
     const ivx = (x - ptr.x) / dt;
     const ivy = (y - ptr.y) / dt;
@@ -868,7 +890,7 @@ export class Garden {
     if (!ptr) return;
     if (ptr.plant) {
       this.release(ptr);
-    } else if (!cancelled && ptr.down && !ptr.moved && performance.now() - ptr.startT < 500) {
+    } else if (!cancelled && ptr.down && !ptr.moved && this.clock() - ptr.startT < 500) {
       this.bloom(x, y);
     }
     ptr.down = false;

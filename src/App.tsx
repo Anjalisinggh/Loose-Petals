@@ -29,6 +29,8 @@ export function App() {
     const garden = new Garden(canvasRef.current!, { reducedMotion: reduced, onCount: setCount });
     gardenRef.current = garden;
     garden.start();
+    // Development only: lets a recording script drive the garden frame by frame.
+    if (import.meta.env.DEV) (window as unknown as { __garden?: Garden }).__garden = garden;
     return () => {
       garden.destroy();
       gardenRef.current = null;
